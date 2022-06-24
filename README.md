@@ -24,4 +24,4 @@ Caltech-256 物品分类数据集由Caltech-101数据集演变而来，该数据
 - Total Number of Samples，表示实际总样本数数量
 - 计算公式如下：
 
-![](http://latex.codecogs.com/svg.latex?\text { Score }=100 * \frac{\text { True }}{\text { Total Number of Samples }})
+$$\text { Score }=100 * \frac{\text { True }}{\text { Total Number of Samples }}$$
