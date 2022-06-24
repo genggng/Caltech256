@@ -11,6 +11,9 @@ from flyai_sdk import FlyAI, DataHelper, MODEL_PATH
 from vgg import vgg11
 from PIL import Image
 from torch.utils.data import Dataset
+import torchvision.models as models
+from my_transform import get_train_transform
+from warm_lr import adjust_learning_rate_cosine,adjust_learning_rate_step
 
 '''
 样例代码仅供参考学习，可以自己修改实现逻辑。
@@ -26,22 +29,15 @@ from PIL import ImageFile
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-# 项目的超参，不使用可以删除
-parser = argparse.ArgumentParser()
-parser.add_argument("-e", "--EPOCHS", default=1, type=int, help="train epochs")
-parser.add_argument("-b", "--BATCH", default=8, type=int, help="batch size")
-parser.add_argument('-gpu', default=False, help='use gpu or not')
-parser.add_argument('-lr', type=float, default=0.001, help='initial learning rate')
-parser.add_argument('-net', type=str, default='lenet', help='Net of project')
-parser.add_argument('-loss', type=str, default='CE', help='Net of project')
+# 项目的超参数
 
-args = parser.parse_args()
-
-image_mean = [0.38753143, 0.36847523, 0.27735737]
-image_std = [0.25998375, 0.23844026, 0.2313706]
-max_epochs = args.EPOCHS
-train_bs = args.BATCH
+# image_mean = [0.38753143, 0.36847523, 0.27735737]
+# image_std = [0.25998375, 0.23844026, 0.2313706]
+epochs = 200
+batch_size = 256
 train_csv_path = os.path.join(".", "data", "input", "Caltech256", "train.csv")
+learn_rate = 0.001
+
 
 # 判断GPU是否可用
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -91,21 +87,13 @@ class Main(FlyAI):
     '''
 
     def __init__(self):
-        self.train_trans = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.RandomCrop(224, padding=4),
-            transforms.ToTensor(),
-            transforms.Normalize(image_mean, image_std)
-        ])
+        self.train_trans = get_train_transform(size=300)
+
 
     def init_net(self):
-        self.net = vgg11()
+        self.net = models.efficientnet_b7(pretrained=True)
         self.net.to(device)
-
-        if args.loss == 'MSE':
-            self.loss_function = nn.MSELoss(reduction='mean')
-        if args.loss == 'CE':
-            self.loss_function = nn.CrossEntropyLoss()
+        self.loss_function = nn.CrossEntropyLoss()
 
     def download_data(self):
         # 根据数据ID下载训练数据
@@ -120,7 +108,7 @@ class Main(FlyAI):
         '''
         # 构建MyDataset 实例
         self.train_data = MyDataset(txt_path=train_csv_path, transform=self.train_trans)
-        self.train_loader = DataLoader(dataset=self.train_data, batch_size=train_bs, shuffle=True, drop_last=True)
+        self.train_loader = DataLoader(dataset=self.train_data, batch_size=batch_size, shuffle=True, drop_last=True)
 
     def train(self):
         '''
@@ -129,44 +117,65 @@ class Main(FlyAI):
         '''
         self.init_net()
         self.deal_with_data()
-        optimizer = optim.Adam(self.net.parameters(), lr=0.001, betas=(0.9, 0.999))
-
+        optimizer = optim.SGD(self.net.parameters(), lr=learn_rate,
+                      momentum=0.9, weight_decay=0.001)
+        
         criterion = self.loss_function
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
+        epoch_size = len(self.train_data) // batch_size
+        epoch = 0
+        max_iter = epochs * epoch_size
 
-        for epoch in range(max_epochs):
-            loss_sigma = 0.0
-            correct = 0.0
-            total = 0.0
-            scheduler.step()
+        global_step = 0
+        # step 学习率调整参数
+        stepvalues = (10 * epoch_size, 20 * epoch_size, 30 * epoch_size)
+        step_index = 0
 
-            for i, data in enumerate(self.train_loader):
-                inputs, labels = data
-                if use_gpu:
-                    inputs, labels = inputs.cuda(), labels.cuda()
-                optimizer.zero_grad()
-                outputs = self.net(inputs)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
+       
+       
+        for iteration in range(max_iter):
+            print("开始训练")
 
-                # 统计预测信息
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                if use_gpu:
-                    correct += (predicted == labels).cpu().squeeze().sum().numpy()
-                else:
-                    correct += (predicted == labels).squeeze().sum().numpy()
-                loss_sigma += loss.item()
+            global_step += 1
 
-                if i % 10 == 0:
-                    loss_avg = loss_sigma / 10
-                    loss_sigma = 0.0
-                    print("Training: Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}/{:0>3}] Loss: {:.4f} Acc:{:.2%}".format(
-                        epoch + 1, max_epochs, i + 1, len(self.train_loader), loss_avg, correct / total))
+            ##更新迭代器
+            if iteration % epoch_size == 0:
+                # create batch iterator
+                batch_iterator = iter(self.train_loader)
+                loss = 0
+                epoch += 1
+                if epoch > 1:
+                    pass
 
-            torch.save(self.net, save_dir + '/trained_model.pth')
+                self.net.train()
+            
 
+            if iteration in stepvalues:
+                step_index += 1
+            lr = adjust_learning_rate_step(optimizer, learn_rate, 0.1, epoch, step_index, iteration, epoch_size)
+
+            ## 获取image 和 label
+            images, labels = next(batch_iterator)
+            images, labels = images.cuda(), labels.cuda()
+
+            out = self.net(images)
+            loss = criterion(out, labels)
+
+            optimizer.zero_grad()  # 清空梯度信息，否则在每次进行反向传播时都会累加
+            loss.backward()  # loss反向传播
+            optimizer.step()  ##梯度更新
+
+            prediction = torch.max(out, 1)[1]
+            train_correct = (prediction == labels).sum()
+            ##这里得到的train_correct是一个longtensor型，需要转换为float
+            # print(train_correct.type())
+            train_acc = (train_correct.float()) / batch_size
+            
+
+            if iteration % 10 == 0:
+                print('Epoch:' + repr(epoch) + ' || epochiter: ' + repr(iteration % epoch_size) + '/' + repr(epoch_size)
+                    + '|| Totel iter ' + repr(iteration) + ' || Loss: %.6f||' % (loss.item()) + 'ACC: %.3f ||' %(train_acc * 100) + 'LR: %.8f' % (lr))
+
+        torch.save(self.net, save_dir + '/trained_model.pth')
 
 if __name__ == '__main__':
     main = Main()

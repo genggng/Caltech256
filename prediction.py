@@ -5,6 +5,7 @@ from PIL import Image
 import numpy as np
 
 import torch
+from my_transform import get_test_transform
 
 image_mean = [0.38753143, 0.36847523, 0.27735737]
 image_std = [0.25998375, 0.23844026, 0.2313706]
@@ -19,11 +20,7 @@ test_train_trans = transforms.Compose([
 class Prediction(FlyAI):
     def __init__(self):
         super(Prediction, self).__init__()
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(image_mean, image_std)
-        ])
+        self.transform = get_test_transform(size=300)
         self.use_gpu = torch.cuda.is_available()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
