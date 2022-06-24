@@ -14,6 +14,7 @@ from torch.utils.data import Dataset
 import torchvision.models as models
 from my_transform import get_train_transform
 from warm_lr import adjust_learning_rate_cosine,adjust_learning_rate_step
+from models import Efficientnet
 
 '''
 样例代码仅供参考学习，可以自己修改实现逻辑。
@@ -91,7 +92,7 @@ class Main(FlyAI):
 
 
     def init_net(self):
-        self.net = models.efficientnet_b7(pretrained=True)
+        self.net = Efficientnet('efficientnet-b7',num_classes=256)
         self.net.to(device)
         self.loss_function = nn.CrossEntropyLoss()
 
