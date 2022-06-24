@@ -1,27 +1,11 @@
-import torch
-from torch import nn
-from torch.nn import functional as F
-
-from .utils import (
-    round_filters,
-    round_repeats,
-    drop_connect,
-    get_same_padding_conv2d,
-    get_model_params,
-    efficientnet_params,
-    load_pretrained_weights,
-    Swish,
-    MemoryEfficientSwish,
-)
-
+import torch.nn as nn
+from utils import *
 class MBConvBlock(nn.Module):
     """
     Mobile Inverted Residual Bottleneck Block
-
     Args:
         block_args (namedtuple): BlockArgs, see above
         global_params (namedtuple): GlobalParam, see above
-
     Attributes:
         has_se (bool): Whether the block contains a Squeeze and Excitation layer.
     """
@@ -96,7 +80,6 @@ class MBConvBlock(nn.Module):
     def set_swish(self, memory_efficient=True):
         """Sets swish function as memory efficient (for training) or standard (for export)"""
         self._swish = MemoryEfficientSwish() if memory_efficient else Swish()
-
 
 class EfficientNet(nn.Module):
     """
@@ -227,3 +210,4 @@ class EfficientNet(nn.Module):
         valid_models = ['efficientnet-b'+str(i) for i in range(9)]
         if model_name not in valid_models:
             raise ValueError('model_name should be one of: ' + ', '.join(valid_models))
+

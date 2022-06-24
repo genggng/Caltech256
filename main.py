@@ -11,10 +11,11 @@ from flyai_sdk import FlyAI, DataHelper, MODEL_PATH
 from vgg import vgg11
 from PIL import Image
 from torch.utils.data import Dataset
-import torchvision.models as models
 from my_transform import get_train_transform
 from warm_lr import adjust_learning_rate_cosine,adjust_learning_rate_step
-from models import Efficientnet
+
+from build_efficientnet import Efficientnet
+
 
 '''
 样例代码仅供参考学习，可以自己修改实现逻辑。
@@ -116,6 +117,7 @@ class Main(FlyAI):
         训练模型，必须实现此方法
         :return:
         '''
+        
         self.init_net()
         self.deal_with_data()
         optimizer = optim.SGD(self.net.parameters(), lr=learn_rate,
