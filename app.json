@@ -1,0 +1,24 @@
+{
+  "project_id": "Caltech256",
+  "data_id": "Caltech256",
+  "model": {
+    "input": {
+      "columns": [
+        {
+          "name": "image_path",
+          "type": "str",
+          "sample": "image/033.cd/033_0068.jpg"
+        }
+      ]
+    },
+    "output": {
+      "columns": [
+        {
+          "name": "label",
+          "type": "int",
+          "sample": "32"
+        }
+      ]
+    }
+  }
+}
